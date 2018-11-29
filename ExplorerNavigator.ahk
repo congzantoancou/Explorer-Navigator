@@ -1,11 +1,11 @@
+DEFAULT_LABEL := "D:"
 
 transTopDomain(topLevel)
 {
-	result := ""
 	if (topLevel == "src")
-		result := "D:\Sources"
-	else if (topLevel == "rt" or topLevel == "r" or topLevel == "")
-		result := "D:" ; Default top
+		result := "Sources"
+	else if (topLevel == "rt" or topLevel == "r")
+		result := "" ; Default top
 	return result
 }
 
@@ -20,18 +20,95 @@ transDomain(sub, sec, top)
 
 isDomainValid(domain)
 {
-/*
-	FoundPos := RegExMatch(domain, "\w+\.\w+\.\w+")
+	FoundPos := RegExMatch(domain, "\w+(\.\w+\.\w+)?") ; Accept even only top
 	if (FoundPos == 1)
 		return true
 	else
 		return false
-*/
-	return true ; Set this always true for expandability of searching folder
+
+	;return true ; Set this always true for expandability of searching folder
 }
 
 #IfWinActive, ahk_class CabinetWClass
 
+; Explorer Navigator
+; Domain format: SubDomain.SecondLevelDomain.TopLevelDomain
+	$Enter::
+		ControlGetFocus, ctrl, ahk_class CabinetWClass
+		
+		if (ctrl != "Edit1")
+		{
+			Send, {enter}
+		}
+		else ;(ctrl == "Edit1")
+		{
+			ControlGetText, url, Edit1, ahk_class CabinetWClass
+			if RegExMatch(url, "\w:") ; D:\top\sec\sub0\sub1\sub2\...\subn
+				Send, {Enter}
+			else ; sub.sec.top/class1/class2/.../classn
+			{
+				/**
+				* Todo: Split url to:
+				* * domainArray: sub.sec.top
+				* * domainSub: /class1/class2/.../classn
+				*/
+				domArr := StrSplit(url, ".")
+				urlPartition := domArr.MaxIndex()
+				
+				if (urlPartition > 3)
+					MsgBox, Invalid domain
+				else if (urlPartition == 3)
+				{
+					; Now domArr would like: sub | sec | top/sub1/sub2/subn
+					; We need to split top/sub1/sub2/subn it out to: [top][/sub1/sub2/subn]
+					domSub := StrSplit(domArr[3], "/")
+					subPartsSize := domSub.MaxIndex()
+					if (subPartsSize > 0)
+					{
+						; Now domSub would like: top (| sub1 | sub2 | subn)*
+						domArr[3] := domSub[1]
+						; Now domArr would like: sub | sec | top
+						domSub.Remove(1)
+						; Update subPartsSize
+						subPartsSize := domSub.MaxIndex()
+						; Noew domSub would like: sub1 | sub2 | subn
+						; domSub may have none elements. It's ok
+						
+						Loop, %subPartsSize%
+						{
+							subPart .= domSub[A_Index] . "\"
+						}
+					}
+					
+					; Done, the domain now is like sub.sec.top and subparts like: sub1/sub2/subn
+					; We need to translate them to Label:\top\sec\sub\sub1\sub2\subn
+					; First, translate top. Forturnally Only top need to be translate
+					top := transTopDomain(domArr[3])
+					
+					sec := domArr[2]
+					sub := domArr[1]
+					
+					url = %DEFAULT_LABEL%\%top%\%sec%\%sub%\%subPart%
+					subPart := ""
+				}
+				else if (urlPartition == 2)
+				{
+					top := transTopDomain(domArr[2])
+					sec := domArr[1]
+					url = %DEFAULT_LABEL%\%top%\%sec%
+				}
+				else
+				{
+					url = %DEFAULT_LABEL%\%url%
+				}
+				ControlSetText, Edit1, %url%, ahk_class CabinetWClass
+				Send {Enter}
+				url := ""
+			}
+		}
+
+	return
+	
 ; Explorer omnibox control
 	F6::
 		Send {F4}
@@ -67,37 +144,4 @@ isDomainValid(domain)
 		else
 			Send +{home}
 	return
-
-; Explorer Navigator
-	Enter::
-		ControlGetFocus, ctrl, ahk_class CabinetWClass
-		if (ctrl == "Edit1")
-		{
-			ControlGetText, domain, Edit1, ahk_class CabinetWClass
-			domainArray := StrSplit(domain, ".")
-			; SubDomain.SecondLevelDomain.TopLevelDomain
-			if isDomainvalid(domain)
-			{
-				subDomain := domainArray[1]
-				secDomain := domainArray[2]
-				topDomain := domainArray[3]
-				realTopDomain := transTopDomain(topDomain)
-				
-				if (realTopDomain != "")
-				{
-					path := transDomain(subDomain, secDomain, realTopDomain)
-					ControlSetText, Edit1, %path%, ahk_class CabinetWClass
-					Send, {enter}
-					return
-				}
-				
-			}
-			else {
-				MsgBox, Domain is invalid
-			}
-			
-		}
-		else
-			Send, {enter}
-	return
-#IfWinActive
+#IfWinactive
